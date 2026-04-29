@@ -74,7 +74,7 @@ class MauticContactUpsertServiceTest extends TestCase
             'phone'                  => '+15550000000',
             'firstname'              => 'New',
             'manychat_subscriber_id' => 'mc_1',
-            'tags'                   => ['lead', 'vip']
+            'tags'                   => ['lead', 'vip'],
         ]);
 
         self::assertTrue($result['created']);
@@ -114,7 +114,7 @@ class MauticContactUpsertServiceTest extends TestCase
         $result  = $service->upsertFromPayload([
             'phone'                  => '+351912345678',
             'manychat_subscriber_id' => 'mc_phone',
-            'tags'                   => ['warm']
+            'tags'                   => ['warm'],
         ]);
 
         self::assertFalse($result['created']);

@@ -24,8 +24,8 @@ class ManyChatPayloadNormalizerTest extends TestCase
             'tags'          => ['lead', 'vip', 'lead'],
             'custom_fields' => [
                 'Campaign Name' => 'Spring Launch',
-                'entry_point'   => 'Instagram DM'
-            ]
+                'entry_point'   => 'Instagram DM',
+            ],
         ]);
 
         self::assertSame('mc_123', $normalized['manychat_subscriber_id']);
@@ -51,8 +51,8 @@ class ManyChatPayloadNormalizerTest extends TestCase
                 'email'     => 'fallback@example.com',
                 'name'      => 'Fallback User',
                 'platform'  => 'facebook',
-                'tags'      => [['name' => 'warm']]
-            ]
+                'tags'      => [['name' => 'warm']],
+            ],
         ]);
 
         self::assertSame('sub_42', $normalized['manychat_subscriber_id']);
@@ -72,7 +72,7 @@ class ManyChatPayloadNormalizerTest extends TestCase
 
         $normalizer->normalize([
             'subscriber_id' => 'mc_missing',
-            'first_name'    => 'No Identifier'
+            'first_name'    => 'No Identifier',
         ]);
     }
 }

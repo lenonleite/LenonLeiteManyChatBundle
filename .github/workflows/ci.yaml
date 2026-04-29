@@ -1,0 +1,199 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches:
+      - master
+      - main
+      - "feature*"
+      - "fix*"
+  pull_request:
+
+env:
+  PLUGIN_DIR: plugins/LenonLeiteManyChatBundle
+
+jobs:
+  phpunit:
+    name: PHPUnit ${{ matrix.php-versions }}, ${{ matrix.db-types }}, Mautic ${{ matrix.mautic-versions }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php-versions: ["8.2", "8.3"]
+        db-types: ["mysql", "mariadb"]
+        mautic-versions: ["5.2"]
+    services:
+      database:
+        image: ${{ matrix.db-types == 'mysql' && 'mysql:8.0' || 'mariadb:10.3' }}
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: yes
+          MYSQL_DATABASE: mautictest
+        ports:
+          - 3306
+        options: >-
+          --shm-size=2gb
+          --name=${{ matrix.db-types }}
+          --tmpfs=/var/lib/mysql
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+    steps:
+      - name: Checkout Mautic
+        uses: actions/checkout@v4
+        with:
+          repository: mautic/mautic
+          ref: ${{ matrix.mautic-versions }}
+          fetch-depth: 0
+
+      - name: Checkout this plugin
+        uses: actions/checkout@v4
+        with:
+          path: ${{ env.PLUGIN_DIR }}
+
+      - name: Setup PHP environment
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-versions }}
+          ini-values: pcov.enabled=0, pcov.directory=., pcov.exclude="~tests|themes|vendor~", opcache.enable_cli=0
+          extensions: mbstring, xml, ctype, iconv, intl, pdo_sqlite, mysql, pdo_mysql
+          coverage: none
+
+      - name: Add MySQL config file
+        run: |
+          mysqldump --version
+          mysqldump --print-defaults
+          cp .github/ci-files/.my.cnf ~/.my.cnf
+          mysqldump --print-defaults
+
+      - name: Set test environment
+        run: |
+          echo "SYMFONY_ENV=test" >> "$GITHUB_ENV"
+          echo "MAUTIC_ENV=test" >> "$GITHUB_ENV"
+
+      - name: NPM cache
+        uses: actions/cache@v4
+        with:
+          path: ./var/cache/js
+          key: ${{ runner.os }}-js-${{ hashFiles('**/package-lock.json', 'webpack.config.js') }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-js-${{ hashFiles('**/package-lock.json', 'webpack.config.js') }}
+            ${{ runner.os }}-js-
+
+      - name: Install composer requirements
+        uses: ramsey/composer-install@v3
+
+      - name: Install Mautic
+        env:
+          DB_PORT: ${{ job.services.database.ports[3306] }}
+        run: |
+          cp ./.github/ci-files/local.php ./app/config/local.php
+          php bin/console mautic:install --force http://localhost
+
+      - name: Install plugins
+        env:
+          DB_PORT: ${{ job.services.database.ports[3306] }}
+        run: php bin/console mautic:plugins:install --env=dev
+
+      - name: Run tests
+        run: |
+          rm -rf var/cache
+          export DB_PORT="${{ job.services.database.ports[3306] }}"
+          php -d zend.assertions=1 bin/phpunit -d memory_limit=1G --bootstrap vendor/autoload.php --configuration app/phpunit.xml.dist -- "${{ env.PLUGIN_DIR }}/Tests"
+
+      - name: Upload logs as artifacts
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ matrix.php-versions }}-${{ matrix.db-types }}-${{ matrix.mautic-versions }}
+          path: |
+            ./var/logs/*
+            ./media/files/temp/test*.html
+
+  mautic:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        commands: ["PHPStan", "CS Fixer", "Rector", "Twig Lint"]
+        php-versions: ["8.3"]
+        mautic-versions: ["5.2"]
+
+    name: ${{ matrix.commands }} - ${{ matrix.php-versions }} - ${{ matrix.mautic-versions }}
+
+    steps:
+      - name: Checkout Mautic
+        uses: actions/checkout@v4
+        with:
+          repository: mautic/mautic
+          ref: ${{ matrix.mautic-versions }}
+          fetch-depth: 0
+
+      - name: Checkout this plugin
+        uses: actions/checkout@v4
+        with:
+          path: ${{ env.PLUGIN_DIR }}
+
+      - name: Rector cache
+        if: ${{ matrix.commands == 'Rector' }}
+        uses: actions/cache@v4
+        with:
+          path: ./var/cache/rector
+          key: ${{ runner.os }}-rector-${{ hashFiles('**/composer.lock') }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-rector-${{ hashFiles('**/composer.lock') }}
+            ${{ runner.os }}-rector-
+
+      - name: PHPStan cache
+        if: ${{ matrix.commands == 'PHPStan' }}
+        uses: actions/cache@v4
+        with:
+          path: ./var/phpstan-cache
+          key: ${{ runner.os }}-phpstan-${{ hashFiles('**/composer.lock') }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-phpstan-${{ hashFiles('**/composer.lock') }}
+            ${{ runner.os }}-phpstan-
+
+      - name: NPM cache
+        uses: actions/cache@v4
+        with:
+          path: ./var/cache/js
+          key: ${{ runner.os }}-js-${{ hashFiles('**/package-lock.json', 'webpack.config.js') }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-js-${{ hashFiles('**/package-lock.json', 'webpack.config.js') }}
+            ${{ runner.os }}-js-
+
+      - name: Setup PHP, with composer and extensions
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-versions }}
+          extensions: mbstring, xml, ctype, iconv, intl, pdo_sqlite, mysql, pdo_mysql
+          ini-values: opcache.enable_cli=0
+
+      - name: Install dependencies
+        uses: ramsey/composer-install@v3
+        env:
+          NPM_CONFIG_CACHE: ./var/cache/js/npm
+
+      - name: Run ${{ matrix.commands }}
+        run: |
+          if [[ "${{ matrix.commands }}" == "PHPStan" ]]; then
+            composer remove --dev rector/rector
+            rm -f rector.php
+            php "${{ env.PLUGIN_DIR }}/.github/phpstan-config.php"
+            export SYMFONY_ENV=dev
+            export APP_ENV=dev
+            export APP_DEBUG=1
+            composer phpstan -- --no-progress "${{ env.PLUGIN_DIR }}"
+          elif [[ "${{ matrix.commands }}" == "Rector" ]]; then
+            export SYMFONY_ENV=test
+            bin/console cache:warmup
+            bin/rector process --dry-run --ansi -- "${{ env.PLUGIN_DIR }}"
+          elif [[ "${{ matrix.commands }}" == "Twig Lint" ]]; then
+            bin/console lint:twig "${{ env.PLUGIN_DIR }}"
+          elif [[ "${{ matrix.commands }}" == "CS Fixer" ]]; then
+            bin/php-cs-fixer fix "${{ env.PLUGIN_DIR }}" --config=.php-cs-fixer.php -v --dry-run --using-cache=no --show-progress=dots --diff
+          else
+            echo "Invalid command"
+            exit 1
+          fi

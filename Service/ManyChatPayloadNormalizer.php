@@ -83,8 +83,6 @@ final class ManyChatPayloadNormalizer
     }
 
     /**
-     * @param mixed $tags
-     *
      * @return string[]
      */
     private function normalizeTags(mixed $tags): array
@@ -117,8 +115,6 @@ final class ManyChatPayloadNormalizer
     }
 
     /**
-     * @param mixed $customFields
-     *
      * @return array<string, string>
      */
     private function normalizeCustomFields(mixed $customFields): array
@@ -129,11 +125,11 @@ final class ManyChatPayloadNormalizer
 
         $normalized = [];
         foreach ($customFields as $key => $value) {
-            $alias = is_string($key) ? $this->normalizeCustomFieldAlias($key) : '';
+            $alias      = is_string($key) ? $this->normalizeCustomFieldAlias($key) : '';
             $fieldValue = $value;
 
             if (is_array($value)) {
-                $alias = $alias ?: $this->normalizeCustomFieldAlias((string) ($value['name'] ?? $value['field_name'] ?? $value['key'] ?? ''));
+                $alias      = $alias ?: $this->normalizeCustomFieldAlias((string) ($value['name'] ?? $value['field_name'] ?? $value['key'] ?? ''));
                 $fieldValue = $value['value'] ?? $value['field_value'] ?? $value['text'] ?? null;
             }
 
