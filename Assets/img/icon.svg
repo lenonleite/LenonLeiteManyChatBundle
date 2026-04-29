@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="ManyChat Connector">
+  <rect width="128" height="128" rx="24" fill="#0f766e"/>
+  <path d="M32 40h64v28a28 28 0 0 1-28 28H56l-16 16V40z" fill="#ffffff"/>
+  <circle cx="50" cy="63" r="6" fill="#0f766e"/>
+  <circle cx="64" cy="63" r="6" fill="#0f766e"/>
+  <circle cx="78" cy="63" r="6" fill="#0f766e"/>
+</svg>

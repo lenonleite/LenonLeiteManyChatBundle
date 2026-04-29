@@ -1,0 +1,71 @@
+{
+  "name": "lenonleite/manychat-connector",
+  "description": "Mautic 5.2 plugin for inbound ManyChat contact sync",
+  "type": "mautic-plugin",
+  "license": "GPL-3.0-or-later",
+  "authors": [
+    {
+      "name": "Lenon Leite",
+      "email": "lenonleite@gmail.com"
+    }
+  ],
+  "keywords": [
+    "mautic",
+    "plugin",
+    "manychat",
+    "integration"
+  ],
+  "extra": {
+    "install-directory-name": "LenonLeiteManyChatBundle"
+  },
+  "require": {
+    "mautic/core-lib": "^5.0"
+  },
+  "require-dev": {
+    "liip/functional-test-bundle": "^4.2",
+    "liip/test-fixtures-bundle": "^1.6",
+    "phpunit/phpunit": "^9.5",
+    "friendsofphp/php-cs-fixer": "^3.4",
+    "symfony/browser-kit": "^5.4",
+    "phpstan/phpstan": "^1.0",
+    "phpstan/phpstan-deprecation-rules": "^1.0",
+    "phpstan/phpstan-phpunit": "^1.0",
+    "phpstan/phpstan-strict-rules": "^1.0",
+    "rector/rector": "^1.0.4"
+  },
+  "minimum-stability": "dev",
+  "autoload": {
+    "psr-4": {
+      "MauticPlugin\\LenonLeiteManyChatBundle\\": ""
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "MauticPlugin\\LenonLeiteManyChatBundle\\Tests\\": "Tests"
+    }
+  },
+  "repositories": [
+    {
+      "type": "git",
+      "url": "https://github.com/mautic/FOSOAuthServerBundle.git"
+    },
+    {
+      "type": "git",
+      "url": "https://github.com/mautic/SpBundle.git"
+    },
+    {
+      "type": "git",
+      "url": "https://github.com/mautic/SymfonyBridgeBundle.git"
+    }
+  ],
+  "scripts": {
+    "fixcs": "./vendor/bin/php-cs-fixer fix --config .php-cs-fixer.php --show-progress dots -v",
+    "phpstan": "./vendor/bin/phpstan"
+  },
+  "config": {
+    "allow-plugins": {
+      "symfony/flex": true,
+      "php-http/discovery": false
+    }
+  }
+}
