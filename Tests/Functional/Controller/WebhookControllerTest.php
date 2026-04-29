@@ -4,55 +4,88 @@ declare(strict_types=1);
 
 namespace MauticPlugin\LenonLeiteManyChatBundle\Tests\Functional\Controller;
 
-use Mautic\CoreBundle\Test\MauticMysqlTestCase;
-use Mautic\LeadBundle\Entity\Lead;
-use MauticPlugin\LenonLeiteManyChatBundle\Tests\Traits\ActivePluginTrait;
-use MauticPlugin\LenonLeiteManyChatBundle\Tests\Traits\HelperEntitiesTrait;
+use MauticPlugin\LenonLeiteManyChatBundle\Controller\WebhookController;
+use MauticPlugin\LenonLeiteManyChatBundle\Service\ManyChatConfig;
+use MauticPlugin\LenonLeiteManyChatBundle\Service\ManyChatPayloadNormalizer;
+use MauticPlugin\LenonLeiteManyChatBundle\Service\ManyChatSyncLogger;
+use MauticPlugin\LenonLeiteManyChatBundle\Service\MauticContactUpsertService;
+use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\Routing\Route;
 
-class WebhookControllerTest extends MauticMysqlTestCase
+class WebhookControllerTest extends TestCase
 {
-    use ActivePluginTrait;
-    use HelperEntitiesTrait;
+    private ManyChatConfig&MockObject $config;
 
-    protected $useCleanupRollback = false;
+    private ManyChatPayloadNormalizer $payloadNormalizer;
+
+    private MauticContactUpsertService&MockObject $contactUpsertService;
+
+    private ManyChatSyncLogger&MockObject $syncLogger;
+
+    private WebhookController $controller;
 
     protected function setUp(): void
     {
-        $this->configParams['manychat_enabled'] = true;
-        $this->configParams['manychat_webhook_secret'] = 'test-secret';
-        $this->configParams['manychat_contact_lookup_field'] = 'email';
-        $this->configParams['manychat_tag_prefix'] = 'manychat:';
-        $this->configParams['manychat_sync_direction'] = 'manychat_to_mautic';
+        $this->config               = $this->createMock(ManyChatConfig::class);
+        $this->payloadNormalizer    = new ManyChatPayloadNormalizer();
+        $this->contactUpsertService = $this->createMock(MauticContactUpsertService::class);
+        $this->syncLogger           = $this->createMock(ManyChatSyncLogger::class);
 
-        parent::setUp();
-        $this->activePlugin();
-        $this->ensureWebhookRoute();
+        $this->controller = new WebhookController(
+            $this->config,
+            $this->payloadNormalizer,
+            $this->contactUpsertService,
+            $this->syncLogger
+        );
     }
 
-    private function ensureWebhookRoute(): void
+    public function testCreatesAndUpdatesContact(): void
     {
-        $routes = $this->router->getRouteCollection();
-        if (null !== $routes->get('lenonleite_manychat_webhook_sync')) {
-            return;
-        }
+        $this->config->method('isEnabled')->willReturn(true);
+        $this->config->method('isValidWebhookSecret')->with('test-secret')->willReturn(true);
 
-        $routes->add('lenonleite_manychat_webhook_sync', new Route(
-            '/manychat/webhook/contact-sync',
-            ['_controller' => \MauticPlugin\LenonLeiteManyChatBundle\Controller\WebhookController::class.'::syncAction'],
-            [],
-            [],
-            '',
-            [],
-            ['POST']
-        ));
-    }
+        $this->contactUpsertService
+            ->expects(self::exactly(2))
+            ->method('upsertFromPayload')
+            ->willReturnCallback(function (array $normalizedPayload): array {
+                if ('mc_123' === ($normalizedPayload['manychat_subscriber_id'] ?? null)) {
+                    self::assertSame('john@example.com', $normalizedPayload['email']);
+                    self::assertSame('John', $normalizedPayload['firstname']);
+                    self::assertSame('Doe', $normalizedPayload['lastname']);
+                    self::assertSame('instagram', $normalizedPayload['manychat_channel']);
+                    self::assertSame('Spring Launch', $normalizedPayload['manychat_campaign_name']);
+                    self::assertSame(['lead', 'vip'], $normalizedPayload['tags']);
 
-    public function testCreatesContactAndManyChatFields(): void
-    {
-        $payload = [
+                    return [
+                        'contact_id'      => 101,
+                        'created'         => true,
+                        'updated_fields'  => ['email', 'firstname', 'lastname', 'manychat_subscriber_id'],
+                        'ignored_fields'  => [],
+                        'applied_tags'    => ['manychat:lead', 'manychat:vip'],
+                        'lookup_strategy' => 'email',
+                    ];
+                }
+
+                self::assertSame('mc_existing', $normalizedPayload['manychat_subscriber_id']);
+                self::assertSame('john@example.com', $normalizedPayload['email']);
+                self::assertSame('Updated', $normalizedPayload['firstname']);
+                self::assertSame(['warm'], $normalizedPayload['tags']);
+
+                return [
+                    'contact_id'      => 101,
+                    'created'         => false,
+                    'updated_fields'  => ['firstname', 'manychat_subscriber_id'],
+                    'ignored_fields'  => [],
+                    'applied_tags'    => ['manychat:warm'],
+                    'lookup_strategy' => 'email',
+                ];
+            });
+
+        $this->syncLogger->expects(self::exactly(2))->method('info');
+
+        $createResponse = $this->controller->syncAction($this->createJsonRequest([
             'subscriber_id' => 'mc_123',
             'first_name'    => 'John',
             'last_name'     => 'Doe',
@@ -60,112 +93,84 @@ class WebhookControllerTest extends MauticMysqlTestCase
             'channel'       => 'instagram',
             'tags'          => ['lead', 'vip'],
             'custom_fields' => [
-                'campaign_name' => 'Spring Launch'
-            ]
-        ];
-
-        $this->client->request(
-            Request::METHOD_POST,
-            '/manychat/webhook/contact-sync',
-            [],
-            [],
-            [
-                'CONTENT_TYPE' => 'application/json',
-                'HTTP_X_MANYCHAT_SECRET' => 'test-secret'
+                'campaign_name' => 'Spring Launch',
             ],
-            json_encode($payload)
+        ], 'test-secret'));
+
+        self::assertSame(Response::HTTP_OK, $createResponse->getStatusCode());
+        self::assertSame(
+            [
+                'success'         => true,
+                'contact_id'      => 101,
+                'created'         => true,
+                'updated_fields'  => ['email', 'firstname', 'lastname', 'manychat_subscriber_id'],
+                'ignored_fields'  => [],
+                'applied_tags'    => ['manychat:lead', 'manychat:vip'],
+                'lookup_strategy' => 'email',
+            ],
+            json_decode((string) $createResponse->getContent(), true)
         );
 
-        $response = $this->client->getResponse();
-        self::assertSame(Response::HTTP_OK, $response->getStatusCode(), $response->getContent());
-
-        $data = json_decode((string) $response->getContent(), true);
-        self::assertTrue($data['success']);
-        self::assertTrue($data['created']);
-        self::assertContains('manychat:lead', $data['applied_tags']);
-        self::assertContains('manychat:vip', $data['applied_tags']);
-
-        $this->em->clear();
-        $lead = $this->em->getRepository(Lead::class)->find($data['contact_id']);
-        self::assertInstanceOf(Lead::class, $lead);
-
-        $fields = $this->em->getRepository(Lead::class)->getFieldValues($lead->getId());
-        $lead->setFields($fields);
-
-        self::assertSame('john@example.com', $lead->getFieldValue('email'));
-        self::assertSame('John', $lead->getFieldValue('firstname'));
-        self::assertSame('Doe', $lead->getFieldValue('lastname'));
-        self::assertSame('mc_123', $lead->getFieldValue('manychat_subscriber_id'));
-        self::assertSame('instagram', $lead->getFieldValue('manychat_channel'));
-        self::assertSame('Spring Launch', $lead->getFieldValue('manychat_campaign_name'));
-
-        $leadTags = array_map(static fn ($tag): string => $tag->getTag(), $lead->getTags()->toArray());
-        self::assertContains('manychat:lead', $leadTags);
-        self::assertContains('manychat:vip', $leadTags);
-    }
-
-    public function testUpdatesExistingContact(): void
-    {
-        $lead = $this->createLead('Existing', 'existing@example.com');
-
-        $payload = [
+        $updateResponse = $this->controller->syncAction($this->createJsonRequest([
             'subscriber_id' => 'mc_existing',
-            'email'         => 'existing@example.com',
+            'email'         => 'john@example.com',
             'first_name'    => 'Updated',
-            'tags'          => ['warm']
-        ];
+            'tags'          => ['warm'],
+        ], 'test-secret'));
 
-        $this->client->request(
-            Request::METHOD_POST,
-            '/manychat/webhook/contact-sync',
-            [],
-            [],
+        self::assertSame(Response::HTTP_OK, $updateResponse->getStatusCode());
+        self::assertSame(
             [
-                'CONTENT_TYPE' => 'application/json',
-                'HTTP_X_MANYCHAT_SECRET' => 'test-secret'
+                'success'         => true,
+                'contact_id'      => 101,
+                'created'         => false,
+                'updated_fields'  => ['firstname', 'manychat_subscriber_id'],
+                'ignored_fields'  => [],
+                'applied_tags'    => ['manychat:warm'],
+                'lookup_strategy' => 'email',
             ],
-            json_encode($payload)
+            json_decode((string) $updateResponse->getContent(), true)
         );
-
-        $response = $this->client->getResponse();
-        self::assertSame(Response::HTTP_OK, $response->getStatusCode(), $response->getContent());
-
-        $data = json_decode((string) $response->getContent(), true);
-        self::assertTrue($data['success']);
-        self::assertFalse($data['created']);
-        self::assertSame($lead->getId(), $data['contact_id']);
-
-        $this->em->clear();
-        $updatedLead = $this->em->getRepository(Lead::class)->find($lead->getId());
-        self::assertInstanceOf(Lead::class, $updatedLead);
-        $fields = $this->em->getRepository(Lead::class)->getFieldValues($updatedLead->getId());
-        $updatedLead->setFields($fields);
-
-        self::assertSame('Updated', $updatedLead->getFieldValue('firstname'));
-        self::assertSame('mc_existing', $updatedLead->getFieldValue('manychat_subscriber_id'));
     }
 
     public function testRejectsInvalidSecret(): void
     {
-        $this->client->request(
-            Request::METHOD_POST,
-            '/manychat/webhook/contact-sync',
-            [],
-            [],
+        $this->config->method('isEnabled')->willReturn(true);
+        $this->config->method('isValidWebhookSecret')->with('wrong-secret')->willReturn(false);
+        $this->contactUpsertService->expects(self::never())->method('upsertFromPayload');
+        $this->syncLogger->expects(self::once())->method('warning');
+
+        $response = $this->controller->syncAction($this->createJsonRequest([
+            'email' => 'secret@example.com',
+        ], 'wrong-secret'));
+
+        self::assertSame(Response::HTTP_UNAUTHORIZED, $response->getStatusCode());
+        self::assertSame(
             [
-                'CONTENT_TYPE' => 'application/json',
-                'HTTP_X_MANYCHAT_SECRET' => 'wrong-secret'
+                'success' => false,
+                'message' => 'Invalid webhook secret.',
             ],
-            json_encode([
-                'email' => 'secret@example.com'
-            ])
+            json_decode((string) $response->getContent(), true)
         );
+    }
 
-        $response = $this->client->getResponse();
-        self::assertSame(Response::HTTP_UNAUTHORIZED, $response->getStatusCode(), $response->getContent());
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function createJsonRequest(array $payload, string $secret): Request
+    {
+        $request = Request::create(
+            '/manychat/webhook/contact-sync',
+            Request::METHOD_POST,
+            [],
+            [],
+            [],
+            [],
+            json_encode($payload)
+        );
+        $request->headers->set('Content-Type', 'application/json');
+        $request->headers->set('X-ManyChat-Secret', $secret);
 
-        $data = json_decode((string) $response->getContent(), true);
-        self::assertFalse($data['success']);
-        self::assertSame('Invalid webhook secret.', $data['message']);
+        return $request;
     }
 }

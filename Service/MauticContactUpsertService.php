@@ -104,8 +104,6 @@ class MauticContactUpsertService
     }
 
     /**
-     * @param mixed $tags
-     *
      * @return string[]
      */
     private function prefixTags(mixed $tags): array
@@ -123,7 +121,7 @@ class MauticContactUpsertService
             }
 
             $cleanTag  = trim($tag);
-            $result[] = '' !== $prefix && !str_starts_with($cleanTag, $prefix)
+            $result[]  = '' !== $prefix && !str_starts_with($cleanTag, $prefix)
                 ? $prefix.$cleanTag
                 : $cleanTag;
         }
