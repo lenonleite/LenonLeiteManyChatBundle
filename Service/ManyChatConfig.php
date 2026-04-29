@@ -35,6 +35,18 @@ class ManyChatConfig
         return trim((string) $this->coreParametersHelper->get('manychat_webhook_secret'));
     }
 
+    public function getFieldUpdateMode(): string
+    {
+        $mode = (string) $this->coreParametersHelper->get('manychat_field_update_mode');
+
+        return in_array($mode, ['overwrite', 'fill_empty'], true) ? $mode : 'overwrite';
+    }
+
+    public function shouldOnlyFillEmptyValues(): bool
+    {
+        return 'fill_empty' === $this->getFieldUpdateMode();
+    }
+
     public function isValidWebhookSecret(?string $providedSecret): bool
     {
         $expected = $this->getWebhookSecret();

@@ -33,6 +33,7 @@ class MauticContactUpsertServiceTest extends TestCase
         $leadModel->method('getRepository')->willReturn($repository);
         $config->method('getContactLookupField')->willReturn('email');
         $config->method('getTagPrefix')->willReturn('manychat:');
+        $config->method('shouldOnlyFillEmptyValues')->willReturn(false);
 
         $capturedFieldData = null;
         $savedLead         = null;
@@ -104,6 +105,7 @@ class MauticContactUpsertServiceTest extends TestCase
         $leadModel->method('getRepository')->willReturn($repository);
         $config->method('getContactLookupField')->willReturn('phone');
         $config->method('getTagPrefix')->willReturn('');
+        $config->method('shouldOnlyFillEmptyValues')->willReturn(false);
 
         $fieldManager->expects(self::once())->method('ensureFields');
         $leadModel->expects(self::once())->method('setFieldValues');
@@ -120,5 +122,74 @@ class MauticContactUpsertServiceTest extends TestCase
         self::assertFalse($result['created']);
         self::assertSame(['warm'], $result['applied_tags']);
         self::assertSame('phone', $result['lookup_strategy']);
+    }
+
+    public function testOnlyFillsEmptyValuesWhenConfigured(): void
+    {
+        $existingLead = new Lead();
+        $this->setLeadId($existingLead, 77);
+
+        $repository   = $this->createMock(LeadRepository::class);
+        $leadModel    = $this->createMock(LeadModel::class);
+        $config       = $this->createMock(ManyChatConfig::class);
+        $fieldManager = $this->createMock(MauticContactFieldManager::class);
+
+        $repository->expects(self::once())
+            ->method('getContactsByEmail')
+            ->with('existing@example.com')
+            ->willReturn([$existingLead]);
+        $repository->expects(self::once())
+            ->method('getFieldValues')
+            ->with(77)
+            ->willReturn([
+                'core' => [
+                    'firstname' => ['type' => 'text', 'value' => 'Existing'],
+                    'lastname'  => ['type' => 'text', 'value' => ''],
+                ],
+                'social' => [
+                    'manychat_subscriber_id' => ['type' => 'text', 'value' => 'mc_old'],
+                ],
+            ]);
+
+        $leadModel->method('getRepository')->willReturn($repository);
+        $config->method('getContactLookupField')->willReturn('email');
+        $config->method('getTagPrefix')->willReturn('manychat:');
+        $config->method('shouldOnlyFillEmptyValues')->willReturn(true);
+
+        $fieldManager->expects(self::once())
+            ->method('ensureFields')
+            ->with(['email', 'lastname']);
+
+        $leadModel->expects(self::once())
+            ->method('setFieldValues')
+            ->with(
+                $existingLead,
+                [
+                    'email'    => 'existing@example.com',
+                    'lastname' => 'Updated',
+                ],
+                false,
+                false
+            );
+        $leadModel->expects(self::once())->method('saveEntity')->with($existingLead);
+        $leadModel->expects(self::never())->method('modifyTags');
+
+        $service = new MauticContactUpsertService($leadModel, $config, $fieldManager);
+        $result  = $service->upsertFromPayload([
+            'email'                  => 'existing@example.com',
+            'firstname'              => 'From ManyChat',
+            'lastname'               => 'Updated',
+            'manychat_subscriber_id' => 'mc_new',
+        ]);
+
+        self::assertFalse($result['created']);
+        self::assertSame(['email', 'lastname'], $result['updated_fields']);
+        self::assertSame(['firstname', 'manychat_subscriber_id'], $result['ignored_fields']);
+    }
+
+    private function setLeadId(Lead $lead, int $id): void
+    {
+        $property = new \ReflectionProperty(Lead::class, 'id');
+        $property->setValue($lead, $id);
     }
 }
