@@ -35,7 +35,7 @@ class MauticContactFieldManager
             $field = new LeadField();
             $field->setName(self::DEFAULT_FIELDS[$alias] ?? $this->humanizeAlias($alias))
                 ->setAlias($alias)
-                ->setType('string')
+                ->setType('text')
                 ->setObject('lead')
                 ->setGroup('social');
 

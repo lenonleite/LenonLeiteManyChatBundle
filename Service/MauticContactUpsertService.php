@@ -31,7 +31,11 @@ class MauticContactUpsertService
             $created = true;
         }
 
-        $fieldData = $this->buildFieldData($normalizedPayload);
+        if (!$created && $this->config->shouldOnlyFillEmptyValues()) {
+            $this->hydrateExistingLeadFields($lead);
+        }
+
+        [$fieldData, $ignoredFields] = $this->buildFieldData($normalizedPayload, $lead, $created);
         $this->fieldManager->ensureFields(array_keys($fieldData));
         $this->leadModel->setFieldValues($lead, $fieldData, false, false);
         $this->leadModel->saveEntity($lead);
@@ -45,7 +49,7 @@ class MauticContactUpsertService
             'contact_id'      => $lead->getId(),
             'created'         => $created,
             'updated_fields'  => array_keys($fieldData),
-            'ignored_fields'  => [],
+            'ignored_fields'  => $ignoredFields,
             'applied_tags'    => $tags,
             'lookup_strategy' => $this->config->getContactLookupField(),
         ];
@@ -87,20 +91,27 @@ class MauticContactUpsertService
     /**
      * @param array<string, mixed> $normalizedPayload
      *
-     * @return array<string, mixed>
+     * @return array{0: array<string, mixed>, 1: string[]}
      */
-    private function buildFieldData(array $normalizedPayload): array
+    private function buildFieldData(array $normalizedPayload, Lead $lead, bool $created): array
     {
-        $fieldData = [];
+        $fieldData     = [];
+        $ignoredFields = [];
         foreach ($normalizedPayload as $alias => $value) {
             if ('tags' === $alias || null === $value || '' === $value) {
+                continue;
+            }
+
+            if (!$created && $this->config->shouldOnlyFillEmptyValues() && $this->hasMeaningfulValue($lead->getFieldValue($alias))) {
+                $ignoredFields[] = $alias;
+
                 continue;
             }
 
             $fieldData[$alias] = $value;
         }
 
-        return $fieldData;
+        return [$fieldData, $ignoredFields];
     }
 
     /**
@@ -127,5 +138,31 @@ class MauticContactUpsertService
         }
 
         return array_values(array_unique($result));
+    }
+
+    private function hydrateExistingLeadFields(Lead $lead): void
+    {
+        if (!$lead->getId()) {
+            return;
+        }
+
+        $lead->setFields($this->leadModel->getRepository()->getFieldValues($lead->getId()));
+    }
+
+    private function hasMeaningfulValue(mixed $value): bool
+    {
+        if (null === $value) {
+            return false;
+        }
+
+        if (is_string($value)) {
+            return '' !== trim($value);
+        }
+
+        if (is_array($value)) {
+            return [] !== $value;
+        }
+
+        return true;
     }
 }

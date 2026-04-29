@@ -79,5 +79,19 @@ class ConfigType extends AbstractType
                 'tooltip' => 'lenonleitemanychat.config.form.manychat_sync_direction.tooltip',
             ],
         ]);
+
+        $builder->add('manychat_field_update_mode', ChoiceType::class, [
+            'label'      => 'lenonleitemanychat.config.form.manychat_field_update_mode.label',
+            'label_attr' => ['class' => 'control-label'],
+            'required'   => true,
+            'choices'    => [
+                'Overwrite existing Mautic values' => 'overwrite',
+                'Only fill empty Mautic values'    => 'fill_empty',
+            ],
+            'attr'       => [
+                'class'   => 'form-control',
+                'tooltip' => 'lenonleitemanychat.config.form.manychat_field_update_mode.tooltip',
+            ],
+        ]);
     }
 }

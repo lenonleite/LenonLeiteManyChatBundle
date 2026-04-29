@@ -26,6 +26,9 @@ class MauticContactFieldManagerTest extends TestCase
             ->willReturnCallback(function (LeadField $field): void {
                 self::assertSame('manychat_channel', $field->getAlias());
                 self::assertSame('ManyChat Channel', $field->getName());
+                self::assertSame('text', $field->getType());
+                self::assertSame('lead', $field->getObject());
+                self::assertSame('social', $field->getGroup());
             });
 
         $manager = new MauticContactFieldManager($fieldModel);

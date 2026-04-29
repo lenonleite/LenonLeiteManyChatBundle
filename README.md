@@ -160,6 +160,7 @@ Current settings:
 - `Primary contact match field`
 - `Mautic tag prefix for ManyChat tags`
 - `Sync direction`
+- `Field update behavior`
 
 Recommended values for the current implementation:
 
@@ -168,6 +169,7 @@ Recommended values for the current implementation:
 - `Primary contact match field`: `Email`
 - `Mautic tag prefix`: `manychat:`
 - `Sync direction`: `ManyChat -> Mautic`
+- `Field update behavior`: `Overwrite existing Mautic values` or `Only fill empty Mautic values`
 
 Important note:
 

@@ -32,5 +32,6 @@ return [
         'manychat_contact_lookup_field' => 'email',
         'manychat_tag_prefix'           => 'manychat:',
         'manychat_sync_direction'       => 'manychat_to_mautic',
+        'manychat_field_update_mode'    => 'overwrite',
     ],
 ];

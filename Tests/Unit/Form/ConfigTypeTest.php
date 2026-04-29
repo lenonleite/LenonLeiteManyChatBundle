@@ -34,7 +34,12 @@ class ConfigTypeTest extends TestCase
         self::assertSame(TextType::class, $fields['manychat_webhook_secret'][0]);
         self::assertSame(ChoiceType::class, $fields['manychat_contact_lookup_field'][0]);
         self::assertSame(ChoiceType::class, $fields['manychat_sync_direction'][0]);
+        self::assertSame(ChoiceType::class, $fields['manychat_field_update_mode'][0]);
         self::assertSame('lenonleitemanychat.config.form.manychat_enabled.label', $fields['manychat_enabled'][1]['label']);
         self::assertSame(['Email' => 'email', 'Phone' => 'phone'], $fields['manychat_contact_lookup_field'][1]['choices']);
+        self::assertSame(
+            ['Overwrite existing Mautic values' => 'overwrite', 'Only fill empty Mautic values' => 'fill_empty'],
+            $fields['manychat_field_update_mode'][1]['choices']
+        );
     }
 }
