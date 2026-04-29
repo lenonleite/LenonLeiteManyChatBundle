@@ -88,6 +88,7 @@ class ConfigType extends AbstractType
                 'Overwrite existing Mautic values' => 'overwrite',
                 'Only fill empty Mautic values'    => 'fill_empty',
             ],
+            'data'       => $options['data']['manychat_field_update_mode'] ?? 'overwrite',
             'attr'       => [
                 'class'   => 'form-control',
                 'tooltip' => 'lenonleitemanychat.config.form.manychat_field_update_mode.tooltip',

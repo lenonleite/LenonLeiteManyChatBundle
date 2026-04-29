@@ -41,5 +41,6 @@ class ConfigTypeTest extends TestCase
             ['Overwrite existing Mautic values' => 'overwrite', 'Only fill empty Mautic values' => 'fill_empty'],
             $fields['manychat_field_update_mode'][1]['choices']
         );
+        self::assertSame('overwrite', $fields['manychat_field_update_mode'][1]['data']);
     }
 }
