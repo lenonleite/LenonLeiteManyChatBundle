@@ -26,7 +26,7 @@ class MauticContactFieldManager
      */
     public function ensureFields(array $aliases): void
     {
-        $knownFields = $this->fieldModel->getLeadFields();
+        $knownFields = $this->indexKnownFieldsByAlias($this->fieldModel->getLeadFields());
         foreach (array_unique($aliases) as $alias) {
             if (isset($knownFields[$alias])) {
                 continue;
@@ -47,5 +47,26 @@ class MauticContactFieldManager
     private function humanizeAlias(string $alias): string
     {
         return ucwords(str_replace('_', ' ', $alias));
+    }
+
+    /**
+     * @param iterable<mixed> $fields
+     *
+     * @return array<string, LeadField>
+     */
+    private function indexKnownFieldsByAlias(iterable $fields): array
+    {
+        if ($fields instanceof \Traversable) {
+            $fields = iterator_to_array($fields, false);
+        }
+
+        $indexed = [];
+        foreach ($fields as $field) {
+            if ($field instanceof LeadField) {
+                $indexed[$field->getAlias()] = $field;
+            }
+        }
+
+        return $indexed;
     }
 }
